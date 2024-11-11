@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:random_str_picker/app_bottom_navigation_bar.dart';
 import 'package:random_str_picker/model/str_model.dart';
 import 'package:random_str_picker/repository/str_repository.dart';
@@ -60,22 +63,22 @@ class MyHomePage extends ConsumerWidget {
       ref.watch(sharedPrefStrRepositoryProvider).maybeWhen(orElse: () {
         return const CircularProgressIndicator();
       }, data: (data) {
-        return Flexible(
-            child: data.strings.isNotEmpty
-                ? ListView.builder(
-                    itemCount: data.strings.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(data.strings[index].str),
-                      );
-                    },
-                  )
-                : const Center(
-                    child: Text('No strings found'),
-                  ));
+        return data.strings.isNotEmpty
+            ? ListView.builder(
+                itemCount: data.strings.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text(data.strings[index].str),
+                    subtitle: Text("Picked: ${data.strings[index].pickedAt}"),
+                  );
+                },
+              )
+            : const Center(
+                child: Text('No strings found'),
+              );
       }),
-      Picker(),
-      EditPage(),
+      const Picker(),
+      const EditPage(),
     ];
     return Scaffold(
       body: widgets[ref.watch(currentBottomIndexViewmodelProvider)],
@@ -97,8 +100,19 @@ class EditPage extends ConsumerWidget {
               return Flexible(
                 child: data.strings.isNotEmpty
                     ? ListView.builder(
-                        itemCount: data.strings.length,
+                        itemCount: data.strings.length + 1,
                         itemBuilder: (context, index) {
+                          if (index == data.strings.length) {
+                            return TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'Add string',
+                              ),
+                              onFieldSubmitted: (value) {
+                                ref.read(sharedPrefStrRepositoryProvider.notifier).addString(StrModel(str: value));
+                              },
+                              autofocus: true,
+                            );
+                          }
                           return ListTile(
                             title: Text(data.strings[index].str),
                           );
@@ -111,34 +125,47 @@ class EditPage extends ConsumerWidget {
             }),
         Padding(
           padding: const EdgeInsets.all(15.0),
-          child: ElevatedButton(
-            onPressed: () {
-              showDialog(
-                  context: context,
-                  builder: (context) {
-                    var textController = TextEditingController();
-                    return AlertDialog(
-                      title: const Text('Add string'),
-                      content: TextField(controller: textController),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            ref.read(sharedPrefStrRepositoryProvider.notifier).addString(StrModel(str: textController.text));
-                            Navigator.of(context).pop();
-                          },
-                          child: const Text('Add'),
-                        ),
-                      ],
-                    );
-                  });
-            },
-            child: const Icon(Icons.add),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  showDialog(
+                      context: context,
+                      builder: (context) {
+                        var textController = TextEditingController();
+                        return AlertDialog(
+                          title: const Text('Add string'),
+                          content: TextField(controller: textController),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                ref.read(sharedPrefStrRepositoryProvider.notifier).addString(StrModel(str: textController.text));
+                                Navigator.of(context).pop();
+                              },
+                              child: const Text('Add'),
+                            ),
+                          ],
+                        );
+                      });
+                },
+                child: const Icon(Icons.add),
+              ),
+              const SizedBox(
+                width: 60,
+              ),
+              ElevatedButton(
+                  onPressed: () {
+                    ref.read(sharedPrefStrRepositoryProvider.notifier).clear();
+                  },
+                  child: const Icon(Icons.clear))
+            ],
           ),
         ),
       ],
@@ -146,13 +173,34 @@ class EditPage extends ConsumerWidget {
   }
 }
 
-class Picker extends ConsumerWidget {
+class Picker extends HookConsumerWidget {
+  const Picker({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const Center(
+    final picked = useState<String>('');
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[],
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            picked.value.isEmpty ? "no picked" : picked.value,
+            style: const TextStyle(fontSize: 50),
+          ),
+          ElevatedButton(
+              onPressed: () {
+                debugPrint("Picking a random string");
+                ref.read(sharedPrefStrRepositoryProvider).whenData((data) {
+                  if (data.strings.isNotEmpty) {
+                    Random random = Random();
+                    picked.value = data.strings[random.nextInt(data.strings.length)].str;
+                    ref.read(sharedPrefStrRepositoryProvider.notifier).pick(picked.value);
+                  }
+                });
+              },
+              child: const Icon(Icons.sync)),
+        ],
       ),
     );
   }
